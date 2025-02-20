@@ -1,4 +1,1 @@
-data/
-*.tif
-*.cso
-*.nii
+*.dcm
