@@ -96,7 +96,7 @@ def rotate_image(image: np.ndarray, axis: int, angle: float):
         The rotated 3D image.
     """
     # Pad image to cube before rotation
-    image = pad_to_cube(image, axis=0, target_depth=672)
+    image = pad_to_cube(image, axis=0, target_depth=max(image.shape))
     
     # Get image shape
     d, h, w = image.shape
