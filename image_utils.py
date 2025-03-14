@@ -1,44 +1,84 @@
 # Library imports
+import SimpleITK as sitk
 import numpy as np
-import pydicom
 import cv2
-import os
 
-def load_3d_dicom(patient_path):
-    # Create dicom file paths 
-    filenames = os.listdir(patient_path)
+def load_3d_dicom(dicom_path):
+    """Loads a 3D dicom image.
+    ---
+    Parameters:
+        dicom_path (string): directory to dicom folder
+    ---
+    Output:
+        ct_image (np.ndarray): 3D CT image
+    """
+    # Initiate dicom reader object
+    reader = sitk.ImageSeriesReader()
+    # Load dicom series using reader
+    dicom_series = reader.GetGDCMSeriesFileNames(dicom_path)
+    reader.SetFileNames(dicom_series)
+    # Execute reader to obtain CT image
+    ct_image = reader.Execute()
 
-    # Load all DICOM data 
-    dicom_files = [pydicom.dcmread(os.path.join(patient_path, f)) for f in filenames]
+    return sitk.GetArrayFromImage(ct_image)
 
-    # Sort slices by image position
-    dicom_files.sort(key=lambda x: float(x.ImagePositionPatient[0]))
-
-    # Convert to 3D numpy array
-    image = np.stack([
-        f.pixel_array*f.RescaleSlope + f.RescaleIntercept 
-        for f in dicom_files
-    ], axis=0)
-
-    return image
-
-def apply_window(image, window_level=450, window_width=1500):
-    # Apply window and normalize to 0-255
+def apply_window(ct_image, window_level=450, window_width=1500):
+    """"Applies a windowing and normalisation to image intensities.
+    ---
+    Parameters:
+        ct_image (np.ndarray): 3D CT image
+        window_level (int): center of intensity window
+        window_width (int): width of intensity window
+    ---
+    Output:
+        ct_image_windowed (np.ndarray): windowed 3D CT image
+    """
+    # Calculate bounds of intensity window
     lower = window_level - window_width/2
     upper = window_level + window_width/2
-    image = np.clip(image, lower, upper)
-    image = (image - lower)/(upper - lower)*255
+    # Apply pixel intensity window
+    ct_image_windowed = np.clip(ct_image, lower, upper)
+    # Apply pixel intensity normalisation
+    ct_image_windowed = (ct_image_windowed - lower)/(upper - lower)*255
 
-    return image
+    return ct_image_windowed
 
-def compress_bonemri(image, axis, threshold_min=100, threshold_max=255):    
+def compress_bonemri(ct_image, axis=2, threshold_min=0):  
+    """Applies threshold to 3D CT and compresses image to 2D.
+    ---
+    Parameters:
+        ct_image (np.ndarray): 3D CT image
+        axis (int): 0,1,2 = sagittal, axial, coronal
+        threshold_min (int): minimum intensity value
+    ---
+    Output:
+        compressed_image (np.ndarray): 2D compressed image
+    """  
     # Apply thresholding (set values outside range to 0)
-    binary_image = np.where((image >= threshold_min) & (image <= threshold_max), image, 0)
-
+    binary_image = np.where(ct_image > threshold_min, ct_image, 0)
     # Compress the 3D image to 2D using max projection
     compressed_image = np.sum(binary_image, axis=axis)
 
     return compressed_image
+
+def get_radiograph(ct_image, axis=0, threshold_min=0): 
+    """Generate 2D radiograph from 3D CT image.
+    ---
+    Parameters:
+        ct_image (np.ndarray): 3D CT image
+        axis (int): 0,1,2 = coronal, axial, sagittal
+        threshold_min (int): minimum intensity value
+    ---
+    Output:
+        radiograph (np.ndarray): 2D radiograph image
+    """
+    # Apply thresholds
+    bone_mask = ct_image > threshold_min
+    ct_image[~bone_mask] = np.min(ct_image)
+    # Generate radiograph
+    radiograph_sitk = sitk.MaximumProjection(sitk.GetImageFromArray(ct_image), axis)
+
+    return np.squeeze(sitk.GetArrayFromImage(radiograph_sitk))
 
 def pad_to_cube(image, axis, target_depth=None):
     """Pads a 3D image to a cube shape (target_size, target_size, target_size)."""
