@@ -1,7 +1,9 @@
 # Library imports
 import SimpleITK as sitk
 import numpy as np
-import cv2
+
+from sklearn.decomposition import PCA
+from scipy.spatial.transform import Rotation as R
 
 def load_3d_dicom(dicom_path):
     """Loads a 3D dicom image.
@@ -80,93 +82,107 @@ def get_radiograph(ct_image, axis=0, threshold_min=0):
 
     return np.squeeze(sitk.GetArrayFromImage(radiograph_sitk))
 
-def pad_to_cube(image, axis, target_depth=None):
-    """Pads a 3D image to a cube shape (target_size, target_size, target_size)."""
-    if axis not in [0, 1, 2]:
-        raise ValueError("Axis must be 0, 1, or 2")
-    
-    if target_depth is None:
-        target_depth = max(image.shape)
-        
-    current_depth = image.shape[axis]
-    
-    if current_depth >= target_depth:
-        return image  # No padding needed if already large enough
-    
-    # Compute padding for depth (only pad the first axis)
-    pad_before = (target_depth - current_depth) // 2
-    pad_after = target_depth - current_depth - pad_before
-    
-    min_intensity = np.min(image)  # Use min intensity instead of 0 to avoid artifacts
-
-    if target_depth is None:
-        target_depth = max(image.shape)
-    
-    if axis == 0:
-        # Apply padding only along depth (first axis)
-        padded_image = np.pad(image, [(pad_before, pad_after), (0, 0), (0, 0)], 
-                                    mode='constant', constant_values=min_intensity)   
-    elif axis == 1:
-        # Apply padding only along width (second axis)
-        padded_image = np.pad(image, [(0, 0), (pad_before, pad_after), (0, 0)], 
-                                    mode='constant', constant_values=min_intensity)
-    else:
-        # Apply padding only along height (third axis)
-        padded_image = np.pad(image, [(0, 0), (0, 0), (pad_before, pad_after)], 
-                                    mode='constant', constant_values=min_intensity) 
-    
-    return padded_image
-
-def rotate_image(image: np.ndarray, axis: int, angle: float):
+def rotate_3D(image, sagittal_angle=0.0, coronal_angle=0.0, axial_angle=0.0):
+    """Rotates a 3D image in arbitrary axis.
+    ---
+    Parameters:
+        image (np.ndarray): 3D image
+        sagittal_angle (float): rotation angle in sagittal plane
+        coronal_angle (float): rotation angle in coronal plane
+        axial_angle (float): rotation angle in axial plane
+    ---
+    Output:
+        resampled_image (np.ndarray): rotated 3D image
     """
-    Rotate a 3D image along a given axis using OpenCV for faster processing.
+    # Transform image to SimpleITK object
+    image = sitk.GetImageFromArray(image)
+    
+    # Obtain information for rotation
+    size = image.GetSize()
+    center = [s / 2.0 for s in size]
 
-    Parameters
-    ----------
-    image : np.ndarray
-        The 3D image to rotate.
-    axis : int
-        The axis along which to rotate the image (0 = sagittal, 1 = coronal, 2 = axial).
-    angle : float
-        The angle (in degrees) by which to rotate the image. (Can be positive or negative)
+    # Initialize transform object
+    transform = sitk.Euler3DTransform()
+    transform.SetCenter(center)
+    transform.SetRotation(np.deg2rad(coronal_angle), np.deg2rad(axial_angle), np.deg2rad(sagittal_angle))
 
-    Returns
-    -------
-    np.ndarray
-        The rotated 3D image.
+    # Perform rotation and resample the image
+    resampled_image = sitk.Resample(
+        image, 
+        image.GetSize(), 
+        transform, 
+        sitk.sitkLinear, 
+        image.GetOrigin(), 
+        image.GetSpacing(), 
+        image.GetDirection(), 
+        0, 
+        image.GetPixelID()
+    )
+
+    return sitk.GetArrayFromImage(resampled_image)
+
+def compute_bbox(binary_volume):
+    """Compute the bounding box around a binary volume.
+    ---
+    Parameters:
+        binary_volume (np.ndarray): a 3D binary volume (vertebra)
+    ---
+    Output:
+        bbox_coord (dict): coordinates corners bounding box
+        bbox_mask (np.ndarray): binary mask containing bounding box
     """
-    # Pad image to cube before rotation
-    image = pad_to_cube(image, axis=0, target_depth=672)
+    # Get indices for individual vertebra
+    indices_vertebra = np.where(binary_volume)
+
+    # Get minimum and maximum coordinates in all three dimensions
+    x_min, x_max = np.min(indices_vertebra[2]), np.max(indices_vertebra[2])
+    y_min, y_max = np.min(indices_vertebra[1]), np.max(indices_vertebra[1])
+    z_min, z_max = np.min(indices_vertebra[0]), np.max(indices_vertebra[0])
+
+    # Store bounding cube coordinates
+    bbox_coord = {
+        "x_min": int(x_min), "x_max": int(x_max),
+        "y_min": int(y_min), "y_max": int(y_max),
+        "z_min": int(z_min), "z_max": int(z_max)
+    }
+
+    # Create and store bounding cube
+    bbox_mask = np.zeros_like(binary_volume, dtype=int)
+    bbox_mask[z_min:z_max, y_min:y_max, x_min:x_max] = 1
+
+    return bbox_coord, bbox_mask
+
+def compute_pca(binary_volume, label):
+    """Compute the principle components and their rotation angles.
+    ---
+    Parameters:
+        binary_volume (np.ndarray): a 3D binary volume (vertebra)
+        label (int): vertebra label
+    ---
+    Returns:
+        rotation_matrix (numpy.ndarray): 3x3 rotation matrix.
+        euler_angles (tuple): (yaw, pitch, roll) in degrees.
+    """
+    # Get voxel coordinates
+    coords = np.argwhere(binary_volume)
+    centered_coords = coords - coords.mean(axis=0)
+    # Cut off spinous process for lumbar vertebrae
+    if label >= 12:
+        coords = coords[coords[:, 1] < np.percentile(coords[:, 1], 95)]
+
+    # Compute PCA
+    pca = PCA(n_components=3)
+    pca.fit(coords)
+    components = pca.components_
+
+    # Ensure Y-axis is correctly oriented (fix flipped axis issue)
+    if np.linalg.det(components) < 0:
+        components[1, :] *= -1  # Flip second principal component if needed
     
-    # Get image shape
-    d, h, w = image.shape
-
-    # Select rotation plane
-    if axis == 0:  # Sagittal: Rotate along Y-Z
-        slices = [image[i, :, :] for i in range(d)]
-    elif axis == 1:  # Coronal: Rotate along X-Z
-        slices = [image[:, i, :] for i in range(h)]
-    elif axis == 2:  # Axial: Rotate along X-Y
-        slices = [image[:, :, i] for i in range(w)]
-    else:
-        raise ValueError("Invalid axis. Use 0, 1, or 2.")
+    # Convert to Euler angles (XYZ order)
+    euler_angles = R.from_matrix(components).as_euler('xyz', degrees=True)
     
-    # Get rotation matrix for 2D rotation
-    center = (slices[0].shape[1] // 2, slices[0].shape[0] // 2)
-    rotation_matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
+    # Ensure angles are between -45 and 45 degrees
+    euler_angles = np.array([(((a + 45)  % 90) - 45) for a in euler_angles])
 
-    # Apply rotation to each slice
-    rotated_slices = [
-        cv2.warpAffine(slice_, rotation_matrix, (slice_.shape[1], slice_.shape[0]), flags=cv2.INTER_LINEAR)
-        for slice_ in slices
-    ]
-
-    # Stack back to 3D
-    if axis == 0:
-        rotated_image = np.stack(rotated_slices, axis=0)
-    elif axis == 1:
-        rotated_image = np.stack(rotated_slices, axis=1)
-    elif axis == 2:
-        rotated_image = np.stack(rotated_slices, axis=2)
-
-    return rotated_image
+    return centered_coords, components, euler_angles
