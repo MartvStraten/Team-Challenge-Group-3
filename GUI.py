@@ -3,7 +3,6 @@ import SimpleITK as sitk
 import numpy as np
 import cv2
 import os
-import io
 
 import tkinter as tk
 import tkinter.messagebox
@@ -95,7 +94,8 @@ class App(ctk.CTk):
         )
         self.entry.grid(row=3, column=1, columnspan=2, padx=(20, 0), pady=(20, 20), sticky="nsew")
 
-        self.main_button_1 = ctk.CTkButton(self, 
+        self.main_button_1 = ctk.CTkButton(self,
+            text="Enter", 
             fg_color="transparent", 
             border_width=2, 
             text_color=("gray10", "#DCE4EE")
@@ -160,29 +160,127 @@ class App(ctk.CTk):
             text=f"Axial slice {self.axial_slice_idx}"
         )
 
+        # RADIOGRAPH VIEWER ------------------------------------------------------------------------------------------------------
+        self.image_tabview.add("Radiograph viewer")
+        self.radiograph_viewer_frame = self.image_tabview.tab("Radiograph viewer")
+        self.radiograph_viewer_frame.grid_columnconfigure((0, 1, 2), weight=1)
+        self.radiograph_viewer_frame.grid_rowconfigure((0, 1, 2, 3), weight=1)
+
+        # Sagittal radiograph image label
+        self.sagittal_radiograph_image_label = tk.Label(self.radiograph_viewer_frame,
+            bg="gray10"
+        )
+        self.sagittal_radiograph_image_label.grid(row=0, column=0, padx=10, pady=10)
+        # Coronal radiograph image label
+        self.coronal_radiograph_image_label = tk.Label(self.radiograph_viewer_frame, 
+            bg="gray10"
+        )
+        self.coronal_radiograph_image_label.grid(row=0, column=1, padx=10, pady=10)
+        # Axial radiograph image label
+        self.axial_radiograph_image_label = tk.Label(self.radiograph_viewer_frame, 
+            bg="gray10"
+        )
+        self.axial_radiograph_image_label.grid(row=0, column=2, padx=10, pady=10)
+
+        # Start angle at 0 degrees
+        self.sagittal_radiograph_angle = 0.0
+        self.coronal_radiograph_angle = 0.0
+        self.axial_radiograph_angle = 0.0
+
+        # Sagittal rotation slider widget
+        self.sagittal_radiograph_slider = ctk.CTkSlider(self.radiograph_viewer_frame, 
+            from_=-45, 
+            to=45, 
+            number_of_steps=900,
+            command=self.update_radiograph_angle_sagittal
+        )
+        self.sagittal_radiograph_slider_text = ctk.CTkLabel(self.radiograph_viewer_frame, 
+            text=f"Sagittal angle: {self.sagittal_radiograph_angle:.1f} degrees"
+        )
+        # Coronal slider widget
+        self.coronal_radiograph_slider = ctk.CTkSlider(self.radiograph_viewer_frame, 
+            from_=-12.5, 
+            to=12.5, 
+            number_of_steps=250,
+            command=self.update_radiograph_angle_coronal
+        )
+        self.coronal_radiograph_slider_text = ctk.CTkLabel(self.radiograph_viewer_frame, 
+            text=f"Coronal angle: {self.coronal_radiograph_angle:.1f} degrees"
+        )
+        # Axial slider widget
+        self.axial_radiograph_slider = ctk.CTkSlider(self.radiograph_viewer_frame, 
+            from_=-12.5, 
+            to=12.5, 
+            number_of_steps=250,
+            command=self.update_radiograph_angle_axial
+        )
+        self.axial_radiograph_slider_text = ctk.CTkLabel(self.radiograph_viewer_frame, 
+            text=f"Axial angle: {self.axial_radiograph_angle:.1f} degrees"
+        )
+
+        # ANGLE CALCULATION VIEWER -----------------------------------------------------------------------------------------------
+        self.image_tabview.add("Angle calculation")
+        self.radiograph_viewer_frame = self.image_tabview.tab("Angle calculation")
+        self.radiograph_viewer_frame.grid_columnconfigure((0, 1, 2), weight=1)
+        self.radiograph_viewer_frame.grid_rowconfigure((0, 1, 2, 3), weight=1)
+
         # RIGHT SIDE BAR ---------------------------------------------------------------------------------------------------------
         self.right_tabview = ctk.CTkTabview(self, width=300)
         self.right_tabview.grid(row=0, column=3, padx=(20, 10), pady=(20, 0), sticky="nsew")
 
-        self.right_tabview.add("Vertebra")
-        self.vertebra_frame = self.right_tabview.tab("Vertebra")
-        self.vertebra_frame.grid_columnconfigure(0, weight=1) 
-        self.vertebra_frame.grid_rowconfigure((0, 1), weight=0) 
+        self.right_tabview.add("Features")
+        self.features_frame = self.right_tabview.tab("Features")
+        self.features_frame.grid_columnconfigure(0, weight=1) 
+        self.features_frame.grid_rowconfigure((0, 1), weight=0) 
 
-        # Text label
-        self.target_vertebra_text = ctk.CTkLabel(self.vertebra_frame,
-            text="Select target vertebra"
+        # Text label target vertebra
+        self.target_vertebra_text = ctk.CTkLabel(self.features_frame,
+            text="----- Target vertebra -----",
+            font=ctk.CTkFont(size=16, weight="bold")
         )
         self.target_vertebra_text.grid(row=0, column=0, padx=20, pady=10, sticky="nsew")
-
         # Option menu for target vertebra
-        self.vertebra_mask = None
-        self.vertebra = ["T1", "T2", "T3", "T4", "T5", "T6", "T7", "T8", "T9", "T10", "T11", "T12", "L1", "L2", "L3", "L4", "L5"]
-        self.optionmenu = ctk.CTkOptionMenu(self.vertebra_frame,
+        self.vertebra = ["None", "T1", "T2", "T3", "T4", "T5", "T6", "T7", "T8", "T9", "T10", "T11", "T12", "L1", "L2", "L3", "L4", "L5"]
+        self.optionmenu_vertebra = ctk.CTkOptionMenu(self.features_frame,
             values=self.vertebra,
             command=self.vertebra_select
         )
-        self.optionmenu.grid(row=1, column=0, padx=10, pady=(0, 10), sticky="ew")
+        self.optionmenu_vertebra.grid(row=1, column=0, padx=10, pady=(0, 10), sticky="ew")
+
+        # Text label radiographs
+        self.radiograph_text = ctk.CTkLabel(self.features_frame,
+            text="----- Radiographs -----",
+            font=ctk.CTkFont(size=16, weight="bold")
+        )
+        self.radiograph_text.grid(row=2, column=0, padx=20, pady=10, sticky="nsew")
+        # Option menu for segmented radiograph
+        self.segment_radiograph = ["Full radiograph", "Spine-only radiograph"]
+        self.optionmenu_radiograph = ctk.CTkOptionMenu(self.features_frame,
+            values=self.segment_radiograph,
+            command=self.radiograph_select
+        )
+        self.optionmenu_radiograph.grid(row=3, column=0, padx=10, pady=(0, 10), sticky="ew")
+        # Option menu for style radiograph
+        self.radiograph_styles = ["Fluoroscopy style", "Maximum projection style"]
+        self.optionmenu_radiograph_style = ctk.CTkOptionMenu(self.features_frame,
+            values=self.radiograph_styles,
+            command=self.radiograph_select_style
+        )
+        self.optionmenu_radiograph_style.grid(row=4, column=0, padx=10, pady=(0, 10), sticky="ew")
+        # Generate radiograph buttom
+        self.generate_radiograph_button = ctk.CTkButton(self.features_frame,
+            text="Generate radiograph", 
+            command=self.generate_radiograph,
+            state="disabled"
+        )
+        self.generate_radiograph_button.grid(row=5, column=0, padx=20, pady=10)
+
+        # Text label angle calculation
+        self.angle_calculation_text = ctk.CTkLabel(self.features_frame,
+            text="----- Angle calculation -----",
+            font=ctk.CTkFont(size=16, weight="bold")
+        )
+        self.angle_calculation_text.grid(row=6, column=0, padx=20, pady=10, sticky="nsew")
 
 
     def change_appearance_mode_event(self, new_appearance_mode):
@@ -222,6 +320,9 @@ class App(ctk.CTk):
         # Load segmentation data
         segment = sitk.ReadImage(self.segmentation_path)
         self.segment_data = sitk.GetArrayFromImage(segment)
+        self.vertebra_mask = np.ones(self.segment_data.shape)
+        segment_all = self.segment_data > 0
+        self.segment_dicom_image = self.dicom_image*segment_all
 
         # Set slider range based on the number of slices
         self.sagittal_slider.configure(to=self.dicom_image.shape[0] - 1)
@@ -241,12 +342,28 @@ class App(ctk.CTk):
         self.coronal_slider_text.grid(row=2, column=2)
         self.axial_slider_text.grid(row=3, column=2)
 
+        self.sagittal_radiograph_slider.grid(row=1, column=0, columnspan=2, padx=10, pady=10, sticky="ew")
+        self.coronal_radiograph_slider.grid(row=2, column=0, columnspan=2, padx=10, pady=10, sticky="ew")
+        self.axial_radiograph_slider.grid(row=3, column=0, columnspan=2, padx=10, pady=10, sticky="ew")
+        self.sagittal_radiograph_slider_text.grid(row=1, column=2)
+        self.coronal_radiograph_slider_text.grid(row=2, column=2)
+        self.axial_radiograph_slider_text.grid(row=3, column=2)
+
+        # Activate buttons
+        self.generate_radiograph_button.configure(state="normal")
+
+        # Other stuff
+        self.dicom_for_radiograph = self.dicom_image # Initialize full radiograph
+        self.style_radiograph = self.radiograph_styles[0] # Initialize compressed radiograph
+        self.generate_radiograph() # Generate initial radiograph
+
     def update_slice_sagittal(self, value):
         """Update the displayed slice based on the slider value."""
         self.sagittal_slice_idx = int(float(value))
         self.upload_image_to_label(
             self.sagittal_dicom_image_label, 
-            self.dicom_image[self.sagittal_slice_idx, :, :]
+            self.dicom_image[self.sagittal_slice_idx,:,:],
+            self.vertebra_mask[self.sagittal_slice_idx,:,:]
         )
         self.sagittal_slider_text.configure(text=f"Sagittal slice {self.sagittal_slice_idx}")
 
@@ -255,7 +372,8 @@ class App(ctk.CTk):
         self.axial_slice_idx = int(float(value))
         self.upload_image_to_label(
             self.axial_dicom_image_label, 
-            np.rot90(self.dicom_image[:, self.axial_slice_idx, :], 3)
+            np.rot90(self.dicom_image[:,self.axial_slice_idx,:], 3),
+            np.rot90(self.vertebra_mask[:,self.axial_slice_idx,:], 3)
         )
         self.axial_slider_text.configure(text=f"Axial slice {self.axial_slice_idx}")
 
@@ -264,40 +382,142 @@ class App(ctk.CTk):
         self.coronal_slice_idx = int(float(value))
         self.upload_image_to_label(
             self.coronal_dicom_image_label, 
-            np.rot90(self.dicom_image[:, :, self.coronal_slice_idx], 3)
+            np.rot90(self.dicom_image[:,:,self.coronal_slice_idx], 3),
+            np.rot90(self.vertebra_mask[:,:,self.coronal_slice_idx], 3)
         )
         self.coronal_slider_text.configure(text=f"Coronal slice {self.coronal_slice_idx}")
 
-    def upload_image_to_label(self, label, image): 
-        """Uploading images to label widgets."""      
-        # Prepare image object
-        if isinstance(image, np.ndarray):
-            # Convert NumPy array to PIL Image
-            image_PIL = Image.fromarray(image)
-        elif isinstance(image, plt.Figure):
-            # Convert matplotlib figure to PIL Image
-            buf = io.BytesIO()
-            image.savefig(buf, format='png', bbox_inches='tight', pad_inches=0)
-            buf.seek(0)
-            image_PIL = Image.open(buf)
-        
-        # Turn image into photo and place in widget
-        image_tk = ImageTk.PhotoImage(image_PIL)
-        label.config(image=image_tk)
-        label.image = image_tk
+    def upload_image_to_label(self, label_widget, image, mask=None): 
+        """Uploading images to label widgets."""  
+        # Ensure the input image is in uint8 format (0-255 range)
+        if image.dtype != np.uint8:
+            if image.max() <= 1.0: 
+                image = (image * 255).astype(np.uint8)
+            else: 
+                image = (image / image.max() * 255).astype(np.uint8)
+
+        # Convert grayscale to RGB if necessary
+        if len(image.shape) == 2: 
+            image_rgb = np.stack((image,) * 3, axis=-1)
+        else:
+            image_rgb = image
+
+        if mask is not None and np.min(mask) == 0:
+            # Ensure mask is binary
+            mask = (mask > 0).astype(np.uint8) 
+            # Create a colored overlay (e.g., red with transparency)
+            overlay = np.zeros_like(image_rgb, dtype=np.uint8)
+            overlay[mask > 0] = [255, 0, 0] 
+            # Blend the overlay with the original image
+            alpha = 0.25 
+            image_with_mask = (image_rgb * (1 - alpha) + overlay * alpha).astype(np.uint8)
+            # Convert to PIL image
+            image_with_mask = Image.fromarray(image_with_mask)
+        else:
+            # No mask, just use the RGB image
+            image_with_mask = Image.fromarray(image_rgb)
+
+        # Convert to Tkinter-compatible format
+        image_tk = ImageTk.PhotoImage(image_with_mask)
+
+        # Update the label widget
+        label_widget.config(image=image_tk)
+        label_widget.image = image_tk 
 
     def vertebra_select(self, choice):
         """Selection of target vertebra and update DICOM viewer."""
         # Translate vertebra to label
-        vertebra_to_label = {"T1":1, "T2":2, "T3":3, "T4":4, "T5":5, "T6":6, "T7":7, "T8":8, "T9":9, "T10":10, "T11":11, "T12":12, "L1":13, "L2":14, "L3":15, "L4":16, "L5":17}
+        vertebra_to_label = {"None":0, "T1":1, "T2":2, "T3":3, "T4":4, "T5":5, "T6":6, "T7":7, "T8":8, "T9":9, "T10":10, "T11":11, "T12":12, "L1":13, "L2":14, "L3":15, "L4":16, "L5":17}
         self.target_vertebra = vertebra_to_label[choice]
-
-        # Update DICOM viewer
         self.vertebra_mask = (self.segment_data == self.target_vertebra)
 
-    def generate_contour_plot(self, segmentation_slice):
-        """Generate a contour plot of the segmentation slice using matplotlib."""
-        fig = plt.figure()
-        plt.contour(segmentation_slice)
-        plt.axis('off')
-        return fig
+        # Update DICOM viewer
+        self.upload_image_to_label(
+            self.sagittal_dicom_image_label, 
+            self.dicom_image[self.sagittal_slice_idx,:,:],
+            self.vertebra_mask[self.sagittal_slice_idx,:,:]
+        )
+        self.upload_image_to_label(
+            self.axial_dicom_image_label, 
+            np.rot90(self.dicom_image[:,self.axial_slice_idx,:], 3),
+            np.rot90(self.vertebra_mask[:,self.axial_slice_idx,:], 3)
+        )
+        self.upload_image_to_label(
+            self.coronal_dicom_image_label, 
+            np.rot90(self.dicom_image[:,:,self.coronal_slice_idx], 3),
+            np.rot90(self.vertebra_mask[:,:,self.coronal_slice_idx], 3)
+        )
+
+    def generate_radiograph(self):
+        """Generate radiographs and update the radiograph viewer."""
+        # Rotate the CT volume 
+        if self.sagittal_radiograph_angle != 0 or self.coronal_radiograph_angle != 0 or self.axial_radiograph_angle != 0:
+            radiograph = rotate_3D(
+                self.dicom_for_radiograph, 
+                sagittal_angle=self.sagittal_radiograph_angle,
+                coronal_angle=self.coronal_radiograph_angle,
+                axial_angle=self.axial_radiograph_angle
+            )
+        else:
+            radiograph = self.dicom_for_radiograph
+
+        # Generate radiographs
+        if self.style_radiograph == self.radiograph_styles[0]:
+            self.radiograph_sagittal = compress_bonemri(radiograph, axis=0)
+            self.radiograph_axial = compress_bonemri(radiograph, axis=1)
+            self.radiograph_coronal = compress_bonemri(radiograph, axis=2)
+        else:
+            self.radiograph_sagittal = get_radiograph(radiograph, axis=2)
+            self.radiograph_axial = get_radiograph(radiograph, axis=1)
+            self.radiograph_coronal = get_radiograph(radiograph, axis=0)
+
+        # Update radiograph viewer
+        self.upload_image_to_label(
+            self.sagittal_radiograph_image_label, 
+            self.radiograph_sagittal
+        )
+        self.upload_image_to_label(
+            self.axial_radiograph_image_label, 
+            np.rot90(self.radiograph_axial, 3)
+        )
+        self.upload_image_to_label(
+            self.coronal_radiograph_image_label, 
+            np.rot90(self.radiograph_coronal, 3)
+        )
+
+    def radiograph_select(self, choice):
+        """Selection of full/segmented radiograph."""
+        # Generate correct radiograph
+        if choice == self.segment_radiograph[0]:
+            self.dicom_for_radiograph = self.dicom_image
+        else:
+            self.dicom_for_radiograph = self.segment_dicom_image
+
+    def radiograph_select_style(self, choice):
+        """Selection of style radiograph."""
+        # Generate correct radiograph
+        if choice == self.radiograph_styles[0]:
+            self.style_radiograph = self.radiograph_styles[0]
+        else:
+            self.style_radiograph = self.radiograph_styles[1]
+
+    def update_radiograph_angle_sagittal(self, value):
+        """Update the displayed angle based on the slider value."""
+        self.sagittal_radiograph_angle = value
+        self.sagittal_radiograph_slider_text.configure(
+            text=f"Sagittal angle: {self.sagittal_radiograph_angle:.1f} degrees"
+        )
+    
+    def update_radiograph_angle_coronal(self, value):
+        """Update the displayed angle based on the slider value."""
+        self.coronal_radiograph_angle = value
+        self.coronal_radiograph_slider_text.configure(
+            text=f"Coronal angle: {self.coronal_radiograph_angle:.1f} degrees"
+        )
+    
+    def update_radiograph_angle_axial(self, value):
+        """Update the displayed angle based on the slider value."""
+        self.axial_radiograph_angle = value
+        self.axial_radiograph_slider_text.configure(
+            text=f"Axial angle: {self.axial_radiograph_angle:.1f} degrees"
+        )
