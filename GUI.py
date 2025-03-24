@@ -5,7 +5,6 @@ import cv2
 import os
 
 import tkinter as tk
-import tkinter.messagebox
 import customtkinter as ctk
 
 from tkinter import filedialog
@@ -199,9 +198,9 @@ class App(ctk.CTk):
         )
         # Coronal slider widget
         self.coronal_radiograph_slider = ctk.CTkSlider(self.radiograph_viewer_frame, 
-            from_=-12.5, 
-            to=12.5, 
-            number_of_steps=250,
+            from_=-15, 
+            to=15, 
+            number_of_steps=300,
             command=self.update_radiograph_angle_coronal
         )
         self.coronal_radiograph_slider_text = ctk.CTkLabel(self.radiograph_viewer_frame, 
@@ -209,9 +208,9 @@ class App(ctk.CTk):
         )
         # Axial slider widget
         self.axial_radiograph_slider = ctk.CTkSlider(self.radiograph_viewer_frame, 
-            from_=-12.5, 
-            to=12.5, 
-            number_of_steps=250,
+            from_=-15, 
+            to=15, 
+            number_of_steps=300,
             command=self.update_radiograph_angle_axial
         )
         self.axial_radiograph_slider_text = ctk.CTkLabel(self.radiograph_viewer_frame, 
@@ -233,54 +232,116 @@ class App(ctk.CTk):
         self.features_frame.grid_columnconfigure(0, weight=1) 
         self.features_frame.grid_rowconfigure((0, 1), weight=0) 
 
-        # Text label target vertebra
-        self.target_vertebra_text = ctk.CTkLabel(self.features_frame,
-            text="----- Target vertebra -----",
+        # Window level and width variables
+        self.window_level = 450
+        self.window_width = 1500
+        # DICOM Image text label
+        self.dicom_image_text = ctk.CTkLabel(self.features_frame,
+            text="----- DICOM Image -----",
             font=ctk.CTkFont(size=16, weight="bold")
         )
-        self.target_vertebra_text.grid(row=0, column=0, padx=20, pady=10, sticky="nsew")
-        # Option menu for target vertebra
-        self.vertebra = ["None", "T1", "T2", "T3", "T4", "T5", "T6", "T7", "T8", "T9", "T10", "T11", "T12", "L1", "L2", "L3", "L4", "L5"]
-        self.optionmenu_vertebra = ctk.CTkOptionMenu(self.features_frame,
-            values=self.vertebra,
-            command=self.vertebra_select
+        self.dicom_image_text.grid(row=0, column=0, padx=20, pady=10, sticky="nsew")
+        # Window level text label
+        self.window_level_text = ctk.CTkLabel(self.features_frame,
+            text=f"Window level: {self.window_level}"
         )
-        self.optionmenu_vertebra.grid(row=1, column=0, padx=10, pady=(0, 10), sticky="ew")
+        self.window_level_text.grid(row=1, column=0, padx=20, pady=0, sticky="nsew")
+        # Window level slider widget
+        self.window_level_slider = ctk.CTkSlider(self.features_frame, 
+            from_=0, 
+            to=900, 
+            number_of_steps=90,
+            command=self.update_window_level
+        )
+        self.window_level_slider.grid(row=2, column=0, padx=10, pady=(0,5), sticky="ew")
+        # Window width text label
+        self.window_width_text = ctk.CTkLabel(self.features_frame,
+            text=f"Window width: {self.window_width}"
+        )
+        self.window_width_text.grid(row=3, column=0, padx=20, pady=0, sticky="nsew")
+        # Window width slider widget
+        self.window_width_slider = ctk.CTkSlider(self.features_frame, 
+            from_=0, 
+            to=3000, 
+            number_of_steps=300,
+            command=self.update_window_width
+        )
+        self.window_width_slider.grid(row=4, column=0, padx=10, pady=(0,10), sticky="ew")
+        # Apply window button
+        self.update_window_button = ctk.CTkButton(self.features_frame,
+            text="Apply window", 
+            command=self.update_window,
+            state="disabled"
+        )
+        self.update_window_button.grid(row=5, column=0, padx=20, pady=(10,5))
+        # Reset window button
+        self.reset_window_button = ctk.CTkButton(self.features_frame,
+            text="Reset window", 
+            command=self.reset_window,
+            state="disabled"
+        )
+        self.reset_window_button.grid(row=6, column=0, padx=20, pady=(5,10))
 
         # Text label radiographs
         self.radiograph_text = ctk.CTkLabel(self.features_frame,
-            text="----- Radiographs -----",
+            text="----- Radiograph -----",
             font=ctk.CTkFont(size=16, weight="bold")
         )
-        self.radiograph_text.grid(row=2, column=0, padx=20, pady=10, sticky="nsew")
+        self.radiograph_text.grid(row=7, column=0, padx=20, pady=10, sticky="nsew")
         # Option menu for segmented radiograph
         self.segment_radiograph = ["Full radiograph", "Spine-only radiograph"]
         self.optionmenu_radiograph = ctk.CTkOptionMenu(self.features_frame,
             values=self.segment_radiograph,
             command=self.radiograph_select
         )
-        self.optionmenu_radiograph.grid(row=3, column=0, padx=10, pady=(0, 10), sticky="ew")
+        self.optionmenu_radiograph.grid(row=8, column=0, padx=10, pady=(5,5), sticky="ew")
         # Option menu for style radiograph
         self.radiograph_styles = ["Fluoroscopy style", "Maximum projection style"]
         self.optionmenu_radiograph_style = ctk.CTkOptionMenu(self.features_frame,
             values=self.radiograph_styles,
             command=self.radiograph_select_style
         )
-        self.optionmenu_radiograph_style.grid(row=4, column=0, padx=10, pady=(0, 10), sticky="ew")
+        self.optionmenu_radiograph_style.grid(row=9, column=0, padx=10, pady=(5,10), sticky="ew")
         # Generate radiograph buttom
         self.generate_radiograph_button = ctk.CTkButton(self.features_frame,
             text="Generate radiograph", 
             command=self.generate_radiograph,
             state="disabled"
         )
-        self.generate_radiograph_button.grid(row=5, column=0, padx=20, pady=10)
+        self.generate_radiograph_button.grid(row=10, column=0, padx=20, pady=10)
 
         # Text label angle calculation
         self.angle_calculation_text = ctk.CTkLabel(self.features_frame,
             text="----- Angle calculation -----",
             font=ctk.CTkFont(size=16, weight="bold")
         )
-        self.angle_calculation_text.grid(row=6, column=0, padx=20, pady=10, sticky="nsew")
+        self.angle_calculation_text.grid(row=11, column=0, padx=20, pady=10, sticky="nsew")
+        # Target vertebra text
+        self.target_vertebra_text = ctk.CTkLabel(self.features_frame,
+            text="Select target vertebra"
+        )
+        self.target_vertebra_text.grid(row=12, column=0, padx=20, pady=0, sticky="nsew")
+        # Option menu for target vertebra
+        self.vertebra = ["None", "T1", "T2", "T3", "T4", "T5", "T6", "T7", "T8", "T9", "T10", "T11", "T12", "L1", "L2", "L3", "L4", "L5"]
+        self.optionmenu_vertebra = ctk.CTkOptionMenu(self.features_frame,
+            values=self.vertebra,
+            command=self.vertebra_select
+        )
+        self.optionmenu_vertebra.grid(row=13, column=0, padx=10, pady=(0, 10), sticky="ew")
+        # Calculate reference true AP angles
+        self.reference_trueAP_button = ctk.CTkButton(self.features_frame,
+            text="Calculate reference angles", 
+            command=self.calculate_reference_trueAP_angles,
+            state="disabled"
+        )
+        self.reference_trueAP_button.grid(row=14, column=0, padx=20, pady=(10, 5))
+        # Get new random radiograph 
+        self.random_radiograph_button = ctk.CTkButton(self.features_frame,
+            text="Generate random angles", 
+            command=self.generate_random_angles,
+            state="disabled"
+        )
+        self.random_radiograph_button.grid(row=15, column=0, padx=20, pady=(5, 10))
 
 
     def change_appearance_mode_event(self, new_appearance_mode):
@@ -315,14 +376,17 @@ class App(ctk.CTk):
         """Load patient data and update image frame."""
         # Load dicom data and apply windowing
         self.dicom_image = load_3d_dicom(self.dicom_path)
-        self.dicom_image = apply_window(self.dicom_image, window_level=450, window_width=1500)
+        self.window_dicom_image = apply_window(self.dicom_image, 
+            window_level=self.window_level, 
+            window_width=self.window_width
+        )
 
         # Load segmentation data
         segment = sitk.ReadImage(self.segmentation_path)
         self.segment_data = sitk.GetArrayFromImage(segment)
         self.vertebra_mask = np.ones(self.segment_data.shape)
         segment_all = self.segment_data > 0
-        self.segment_dicom_image = self.dicom_image*segment_all
+        self.segment_dicom_image = self.window_dicom_image*segment_all
 
         # Set slider range based on the number of slices
         self.sagittal_slider.configure(to=self.dicom_image.shape[0] - 1)
@@ -351,9 +415,11 @@ class App(ctk.CTk):
 
         # Activate buttons
         self.generate_radiograph_button.configure(state="normal")
+        self.update_window_button.configure(state="normal")
+        self.reset_window_button.configure(state="normal")
 
         # Other stuff
-        self.dicom_for_radiograph = self.dicom_image # Initialize full radiograph
+        self.dicom_for_radiograph = self.window_dicom_image # Initialize full radiograph
         self.style_radiograph = self.radiograph_styles[0] # Initialize compressed radiograph
         self.generate_radiograph() # Generate initial radiograph
 
@@ -362,7 +428,7 @@ class App(ctk.CTk):
         self.sagittal_slice_idx = int(float(value))
         self.upload_image_to_label(
             self.sagittal_dicom_image_label, 
-            self.dicom_image[self.sagittal_slice_idx,:,:],
+            self.window_dicom_image[self.sagittal_slice_idx,:,:],
             self.vertebra_mask[self.sagittal_slice_idx,:,:]
         )
         self.sagittal_slider_text.configure(text=f"Sagittal slice {self.sagittal_slice_idx}")
@@ -372,7 +438,7 @@ class App(ctk.CTk):
         self.axial_slice_idx = int(float(value))
         self.upload_image_to_label(
             self.axial_dicom_image_label, 
-            np.rot90(self.dicom_image[:,self.axial_slice_idx,:], 3),
+            np.rot90(self.window_dicom_image[:,self.axial_slice_idx,:], 3),
             np.rot90(self.vertebra_mask[:,self.axial_slice_idx,:], 3)
         )
         self.axial_slider_text.configure(text=f"Axial slice {self.axial_slice_idx}")
@@ -382,10 +448,57 @@ class App(ctk.CTk):
         self.coronal_slice_idx = int(float(value))
         self.upload_image_to_label(
             self.coronal_dicom_image_label, 
-            np.rot90(self.dicom_image[:,:,self.coronal_slice_idx], 3),
+            np.rot90(self.window_dicom_image[:,:,self.coronal_slice_idx], 3),
             np.rot90(self.vertebra_mask[:,:,self.coronal_slice_idx], 3)
         )
         self.coronal_slider_text.configure(text=f"Coronal slice {self.coronal_slice_idx}")
+
+    def update_window_level(self, value):
+        self.window_level = int(float(value))
+        self.window_level_text.configure(text=f"Window level: {self.window_level}")
+
+    def update_window_width(self, value):
+        self.window_width = int(float(value))
+        self.window_width_text.configure(text=f"Window width: {self.window_width}")
+
+    def update_window(self):
+        # Update window of dicom image
+        self.window_dicom_image = apply_window(self.dicom_image, 
+            window_level=self.window_level, 
+            window_width=self.window_width
+        )
+        # Update DICOM viewer
+        self.upload_image_to_label(
+            self.sagittal_dicom_image_label, 
+            self.window_dicom_image[self.sagittal_slice_idx,:,:],
+            self.vertebra_mask[self.sagittal_slice_idx,:,:]
+        )
+        self.upload_image_to_label(
+            self.axial_dicom_image_label, 
+            np.rot90(self.window_dicom_image[:,self.axial_slice_idx,:], 3),
+            np.rot90(self.vertebra_mask[:,self.axial_slice_idx,:], 3)
+        )
+        self.upload_image_to_label(
+            self.coronal_dicom_image_label, 
+            np.rot90(self.window_dicom_image[:,:,self.coronal_slice_idx], 3),
+            np.rot90(self.vertebra_mask[:,:,self.coronal_slice_idx], 3)
+        )
+
+    def reset_window(self):
+        # Reset to default values
+        self.window_level = 450
+        self.window_width = 1500
+
+        # Update the slider positions
+        self.window_level_slider.set(self.window_level)
+        self.window_width_slider.set(self.window_width)
+
+        # Update the displayed text (if needed)
+        self.window_level_text.configure(text=f"Window level: {self.window_level}")
+        self.window_width_text.configure(text=f"Window width: {self.window_width}")
+
+        # Update window and DICOM viewer
+        self.update_window()
 
     def upload_image_to_label(self, label_widget, image, mask=None): 
         """Uploading images to label widgets."""  
@@ -423,30 +536,6 @@ class App(ctk.CTk):
         # Update the label widget
         label_widget.config(image=image_tk)
         label_widget.image = image_tk 
-
-    def vertebra_select(self, choice):
-        """Selection of target vertebra and update DICOM viewer."""
-        # Translate vertebra to label
-        vertebra_to_label = {"None":0, "T1":1, "T2":2, "T3":3, "T4":4, "T5":5, "T6":6, "T7":7, "T8":8, "T9":9, "T10":10, "T11":11, "T12":12, "L1":13, "L2":14, "L3":15, "L4":16, "L5":17}
-        self.target_vertebra = vertebra_to_label[choice]
-        self.vertebra_mask = (self.segment_data == self.target_vertebra)
-
-        # Update DICOM viewer
-        self.upload_image_to_label(
-            self.sagittal_dicom_image_label, 
-            self.dicom_image[self.sagittal_slice_idx,:,:],
-            self.vertebra_mask[self.sagittal_slice_idx,:,:]
-        )
-        self.upload_image_to_label(
-            self.axial_dicom_image_label, 
-            np.rot90(self.dicom_image[:,self.axial_slice_idx,:], 3),
-            np.rot90(self.vertebra_mask[:,self.axial_slice_idx,:], 3)
-        )
-        self.upload_image_to_label(
-            self.coronal_dicom_image_label, 
-            np.rot90(self.dicom_image[:,:,self.coronal_slice_idx], 3),
-            np.rot90(self.vertebra_mask[:,:,self.coronal_slice_idx], 3)
-        )
 
     def generate_radiograph(self):
         """Generate radiographs and update the radiograph viewer."""
@@ -489,7 +578,7 @@ class App(ctk.CTk):
         """Selection of full/segmented radiograph."""
         # Generate correct radiograph
         if choice == self.segment_radiograph[0]:
-            self.dicom_for_radiograph = self.dicom_image
+            self.dicom_for_radiograph = self.window_dicom_image
         else:
             self.dicom_for_radiograph = self.segment_dicom_image
 
@@ -521,3 +610,35 @@ class App(ctk.CTk):
         self.axial_radiograph_slider_text.configure(
             text=f"Axial angle: {self.axial_radiograph_angle:.1f} degrees"
         )
+    
+    def vertebra_select(self, choice):
+        """Selection of target vertebra and update DICOM viewer."""
+        # Translate vertebra to label
+        vertebra_to_label = {"None":0, "T1":1, "T2":2, "T3":3, "T4":4, "T5":5, "T6":6, "T7":7, "T8":8, "T9":9, "T10":10, "T11":11, "T12":12, "L1":13, "L2":14, "L3":15, "L4":16, "L5":17}
+        self.target_vertebra = vertebra_to_label[choice]
+        self.vertebra_mask = (self.segment_data == self.target_vertebra)
+
+        # Update DICOM viewer
+        self.upload_image_to_label(
+            self.sagittal_dicom_image_label, 
+            self.window_dicom_image[self.sagittal_slice_idx,:,:],
+            self.vertebra_mask[self.sagittal_slice_idx,:,:]
+        )
+        self.upload_image_to_label(
+            self.axial_dicom_image_label, 
+            np.rot90(self.window_dicom_image[:,self.axial_slice_idx,:], 3),
+            np.rot90(self.vertebra_mask[:,self.axial_slice_idx,:], 3)
+        )
+        self.upload_image_to_label(
+            self.coronal_dicom_image_label, 
+            np.rot90(self.window_dicom_image[:,:,self.coronal_slice_idx], 3),
+            np.rot90(self.vertebra_mask[:,:,self.coronal_slice_idx], 3)
+        )
+
+    def calculate_reference_trueAP_angles(self):
+        # TODO
+        print("Hi")
+
+    def generate_random_angles(self):
+        # TODO
+        print("Hi")
