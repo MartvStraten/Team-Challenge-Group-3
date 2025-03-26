@@ -114,9 +114,9 @@ def get_euler_angles(segment_data):
 
     print(f"Computed bounding box for {len(vertebrae_labels)} vertebra")
 
-    return euler_angles
+    return bounding_box_coords, bounding_box_masks, euler_angles
 
-def generate_template(image, segment_data, label, euler_angles):
+def generate_template(image, segment_data, label, euler_angles, plot=False):
     
     rotated_image = rotate_3D(image, sagittal_angle=euler_angles[label][0], axial_angle=euler_angles[label][2])
     vertebra_mask = (segment_data == label).astype(int)
@@ -138,10 +138,10 @@ def generate_template(image, segment_data, label, euler_angles):
     masked = image_2D*mask
     cropped_mask = masked[10:53, 7:47] 
 
-    fig, ax = plt.subplots(1, 2, figsize=(15, 5))
-    ax[0].imshow(np.rot90(image_2D,3), cmap='gray')
-    ax[1].imshow(np.rot90(cropped_mask,3), cmap='gray')
+    if plot:
+        fig, ax = plt.subplots(1, 2, figsize=(15, 5))
+        ax[0].imshow(np.rot90(image_2D,3), cmap='gray')
+        ax[1].imshow(np.rot90(cropped_mask,3), cmap='gray')
     
     template_image = np.array(cropped_mask, dtype=np.float32)
-    template_nii = nib.Nifti1Image(template_image, np.eye(4))
-    nib.save(template_nii, 'template_image.nii')
+    return template_image

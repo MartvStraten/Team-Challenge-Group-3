@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 import SimpleITK as sitk
 import numpy as np
+import random
 import cv2
 import os
 
@@ -11,6 +12,7 @@ from tkinter import filedialog
 from PIL import Image, ImageTk
 
 from image_utils import *
+from template_matching import *
 
 ctk.set_appearance_mode("Dark")  # Modes: "System" (standard), "Dark", "Light"
 ctk.set_default_color_theme("blue")  # Themes: "blue" (standard), "green", "dark-blue"
@@ -217,11 +219,61 @@ class App(ctk.CTk):
             text=f"Axial angle: {self.axial_radiograph_angle:.1f} degrees"
         )
 
-        # ANGLE CALCULATION VIEWER -----------------------------------------------------------------------------------------------
-        self.image_tabview.add("Angle calculation")
-        self.radiograph_viewer_frame = self.image_tabview.tab("Angle calculation")
-        self.radiograph_viewer_frame.grid_columnconfigure((0, 1, 2), weight=1)
-        self.radiograph_viewer_frame.grid_rowconfigure((0, 1, 2, 3), weight=1)
+        # VERTEBRA VIEWER -----------------------------------------------------------------------------------------------
+        self.image_tabview.add("Vertebra viewer")
+        self.vertebra_viewer_frame = self.image_tabview.tab("Vertebra viewer")
+        self.vertebra_viewer_frame.grid_columnconfigure((0, 1), weight=1)
+        self.vertebra_viewer_frame.grid_rowconfigure((0, 1, 2, 3, 4), weight=1)
+
+        # Radiograph-based bbox text label
+        self.radiograph_bbox_text_label = ctk.CTkLabel(self.vertebra_viewer_frame, 
+            text="Current angles",
+            font=ctk.CTkFont(size=16, weight="bold")
+        )
+        self.radiograph_bbox_text_label.grid(row=0, column=0, padx=20, pady=(0, 10))
+        # Radiograph-based bbox label
+        self.radiograph_bbox_label = tk.Label(self.vertebra_viewer_frame,
+            bg="gray10"
+        )
+        self.radiograph_bbox_label.grid(row=1, column=0, padx=10, pady=10)
+        # Text labels to indicate current angles
+        self.vertebra_sag_angle_text_label = ctk.CTkLabel(self.vertebra_viewer_frame, 
+            text=f"Current sagittal angle: {self.sagittal_radiograph_angle} degrees"
+        )
+        self.vertebra_sag_angle_text_label.grid(row=2, column=0, padx=20, pady=10)
+        self.vertebra_cor_angle_text_label = ctk.CTkLabel(self.vertebra_viewer_frame, 
+            text=f"Current coronal angle: {self.coronal_radiograph_angle} degrees"
+        )
+        self.vertebra_cor_angle_text_label.grid(row=3, column=0, padx=20, pady=10)
+        self.vertebra_ax_angle_text_label = ctk.CTkLabel(self.vertebra_viewer_frame, 
+            text=f"Current axial angle: {self.axial_radiograph_angle} degrees"
+        )
+        self.vertebra_ax_angle_text_label.grid(row=4, column=0, padx=20, pady=10)
+
+        # Optimized bbox text label
+        self.optimized_bbox_text_label = ctk.CTkLabel(self.vertebra_viewer_frame, 
+            text="Optimized angles",
+            font=ctk.CTkFont(size=16, weight="bold")
+        )
+        self.optimized_bbox_text_label.grid(row=0, column=1, padx=20, pady=(0, 10))
+        # Optimized bbox label
+        self.optimized_bbox_label = tk.Label(self.vertebra_viewer_frame, 
+            bg="gray10"
+        )
+        self.optimized_bbox_label.grid(row=1, column=1, columnspan=3, padx=10, pady=10)
+        # Text labels to indicate optimized angles
+        self.opt_sag_angle_text_label = ctk.CTkLabel(self.vertebra_viewer_frame, 
+            text="Optimized sagittal angle: 0 degrees"
+        )
+        self.opt_sag_angle_text_label.grid(row=2, column=1, padx=20, pady=10)
+        self.opt_cor_angle_text_label = ctk.CTkLabel(self.vertebra_viewer_frame, 
+            text=f"Optimized coronal angle: 0 degrees"
+        )
+        self.opt_cor_angle_text_label.grid(row=3, column=1, padx=20, pady=10)
+        self.opt_ax_angle_text_label = ctk.CTkLabel(self.vertebra_viewer_frame, 
+            text=f"Optimized axial angle: 0 degrees"
+        )
+        self.opt_ax_angle_text_label.grid(row=4, column=1, padx=20, pady=10)
 
         # RIGHT SIDE BAR ---------------------------------------------------------------------------------------------------------
         self.right_tabview = ctk.CTkTabview(self, width=300)
@@ -317,6 +369,7 @@ class App(ctk.CTk):
         )
         self.angle_calculation_text.grid(row=11, column=0, padx=20, pady=10, sticky="nsew")
         # Target vertebra text
+        self.target_vertebra = None
         self.target_vertebra_text = ctk.CTkLabel(self.features_frame,
             text="Select target vertebra"
         )
@@ -329,6 +382,7 @@ class App(ctk.CTk):
         )
         self.optionmenu_vertebra.grid(row=13, column=0, padx=10, pady=(0, 10), sticky="ew")
         # Calculate reference true AP angles
+        self.euler_angles = None
         self.reference_trueAP_button = ctk.CTkButton(self.features_frame,
             text="Calculate reference angles", 
             command=self.calculate_reference_trueAP_angles,
@@ -341,7 +395,14 @@ class App(ctk.CTk):
             command=self.generate_random_angles,
             state="disabled"
         )
-        self.random_radiograph_button.grid(row=15, column=0, padx=20, pady=(5, 10))
+        self.random_radiograph_button.grid(row=15, column=0, padx=20, pady=(5, 5))
+        # Start angle optimization
+        self.optimize_angles_button = ctk.CTkButton(self.features_frame,
+            text="Optimize angles", 
+            command=self.optimize_angles,
+            state="disabled"
+        )
+        self.optimize_angles_button.grid(row=16, column=0, padx=20, pady=(5, 10))
 
 
     def change_appearance_mode_event(self, new_appearance_mode):
@@ -387,6 +448,9 @@ class App(ctk.CTk):
         self.vertebra_mask = np.ones(self.segment_data.shape)
         segment_all = self.segment_data > 0
         self.segment_dicom_image = self.window_dicom_image*segment_all
+
+        # Calculate reference bbox and euler angles for all vertebrae
+        self.bbox_coords, self.bbox_masks, self.euler_angles = get_euler_angles(self.segment_data)
 
         # Set slider range based on the number of slices
         self.sagittal_slider.configure(to=self.dicom_image.shape[0] - 1)
@@ -454,14 +518,17 @@ class App(ctk.CTk):
         self.coronal_slider_text.configure(text=f"Coronal slice {self.coronal_slice_idx}")
 
     def update_window_level(self, value):
+        """Update output of the window level slider."""
         self.window_level = int(float(value))
         self.window_level_text.configure(text=f"Window level: {self.window_level}")
 
     def update_window_width(self, value):
+        """Update output of the window width slider."""
         self.window_width = int(float(value))
         self.window_width_text.configure(text=f"Window width: {self.window_width}")
 
     def update_window(self):
+        """Update the window settings and DICOM viewer."""
         # Update window of dicom image
         self.window_dicom_image = apply_window(self.dicom_image, 
             window_level=self.window_level, 
@@ -485,6 +552,7 @@ class App(ctk.CTk):
         )
 
     def reset_window(self):
+        """Reset the window settings and DICOM viewer."""
         # Reset to default values
         self.window_level = 450
         self.window_width = 1500
@@ -500,7 +568,7 @@ class App(ctk.CTk):
         # Update window and DICOM viewer
         self.update_window()
 
-    def upload_image_to_label(self, label_widget, image, mask=None): 
+    def upload_image_to_label(self, label_widget, image, mask=None, scale_factor=None): 
         """Uploading images to label widgets."""  
         # Ensure the input image is in uint8 format (0-255 range)
         if image.dtype != np.uint8:
@@ -508,6 +576,14 @@ class App(ctk.CTk):
                 image = (image * 255).astype(np.uint8)
             else: 
                 image = (image / image.max() * 255).astype(np.uint8)
+
+        # Apply upscaling if scale_factor is provided
+        if scale_factor is not None and scale_factor > 1:
+            # Calculate new dimensions
+            new_height = int(image.shape[0] * scale_factor)
+            new_width = int(image.shape[1] * scale_factor)
+            # Use cv2.resize with INTER_LINEAR or INTER_CUBIC for better quality
+            image = cv2.resize(image, (new_width, new_height), interpolation=cv2.INTER_CUBIC)
 
         # Convert grayscale to RGB if necessary
         if len(image.shape) == 2: 
@@ -574,6 +650,16 @@ class App(ctk.CTk):
             np.rot90(self.radiograph_coronal, 3)
         )
 
+        # Update vertebra viewer
+        if self.target_vertebra is not None:
+            self.update_bbox()
+            self.vertebra_sag_angle_text_label.configure(
+                text=f"Current sagittal angle: {self.sagittal_radiograph_angle:.1f} degrees"
+            )
+            self.vertebra_ax_angle_text_label.configure(
+                text=f"Current axial angle: {self.axial_radiograph_angle:.1f} degrees"
+            )
+
     def radiograph_select(self, choice):
         """Selection of full/segmented radiograph."""
         # Generate correct radiograph
@@ -616,7 +702,7 @@ class App(ctk.CTk):
         # Translate vertebra to label
         vertebra_to_label = {"None":0, "T1":1, "T2":2, "T3":3, "T4":4, "T5":5, "T6":6, "T7":7, "T8":8, "T9":9, "T10":10, "T11":11, "T12":12, "L1":13, "L2":14, "L3":15, "L4":16, "L5":17}
         self.target_vertebra = vertebra_to_label[choice]
-        self.vertebra_mask = (self.segment_data == self.target_vertebra)
+        self.vertebra_mask = (self.segment_data == self.target_vertebra).astype(float)
 
         # Update DICOM viewer
         self.upload_image_to_label(
@@ -635,10 +721,176 @@ class App(ctk.CTk):
             np.rot90(self.vertebra_mask[:,:,self.coronal_slice_idx], 3)
         )
 
+        # Activate angle calculation buttons
+        self.reference_trueAP_button.configure(state="normal")
+        self.random_radiograph_button.configure(state="normal")
+        self.optimize_angles_button.configure(state="normal")
+
+        # Remove optimized bbox image
+        self.optimized_bbox_label.config(image=None)
+        self.optimized_bbox_label.image = None 
+
+        self.opt_sag_angle_text_label.configure(
+            text=f"Optimized sagittal angle: 0 degrees"
+        )
+        self.opt_ax_angle_text_label.configure(
+            text=f"Optimized axial angle: 0 degrees"
+        )
+
     def calculate_reference_trueAP_angles(self):
-        # TODO
-        print("Hi")
+        """Updates radiograph viewer with reference angles for target vertebra."""
+        # Obtain euler angles for target vertebra
+        if self.target_vertebra != 0:
+            self.target_angles = self.euler_angles[self.target_vertebra]
+            self.sagittal_radiograph_angle = self.target_angles[0]
+            self.axial_radiograph_angle = self.target_angles[2]
+
+            # Update radiograph viewer
+            self.generate_radiograph()
+            self.sagittal_radiograph_slider.set(self.sagittal_radiograph_angle)
+            self.sagittal_radiograph_slider_text.configure(
+                text=f"Sagittal angle: {self.sagittal_radiograph_angle:.1f} degrees"
+            )
+            self.axial_radiograph_slider.set(self.axial_radiograph_angle) 
+            self.axial_radiograph_slider_text.configure(
+                text=f"Axial angle: {self.axial_radiograph_angle:.1f} degrees"
+            )
+
+            # Update vertebra viewer
+            self.vertebra_sag_angle_text_label.configure(
+                text=f"Current sagittal angle: {self.sagittal_radiograph_angle:.1f} degrees"
+            )
+            self.vertebra_ax_angle_text_label.configure(
+                text=f"Current axial angle: {self.axial_radiograph_angle:.1f} degrees"
+            )
+            self.optimized_bbox_label.config(image=None)
+            self.optimized_bbox_label.image = None 
+
+            self.opt_sag_angle_text_label.configure(
+                text=f"Optimized sagittal angle: 0 degrees"
+            )
+            self.opt_ax_angle_text_label.configure(
+                text=f"Optimized axial angle: 0 degrees"
+            )
 
     def generate_random_angles(self):
-        # TODO
-        print("Hi")
+        """Updates radiograph viewer with random angles."""
+        # Obtain random angles
+        self.sagittal_radiograph_angle = random.uniform(-45, 45)
+        self.axial_radiograph_angle = random.uniform(-10, 10)
+
+        # Update radiograph viewer
+        self.generate_radiograph()
+        self.sagittal_radiograph_slider.set(self.sagittal_radiograph_angle)
+        self.sagittal_radiograph_slider_text.configure(
+            text=f"Sagittal angle: {self.sagittal_radiograph_angle:.1f} degrees"
+        )
+        self.axial_radiograph_slider.set(self.axial_radiograph_angle) 
+        self.axial_radiograph_slider_text.configure(
+            text=f"Axial angle: {self.axial_radiograph_angle:.1f} degrees"
+        )
+
+        # Update vertebra viewer
+        self.vertebra_sag_angle_text_label.configure(
+            text=f"Current sagittal angle: {self.sagittal_radiograph_angle:.1f} degrees"
+        )
+        self.vertebra_ax_angle_text_label.configure(
+            text=f"Current axial angle: {self.axial_radiograph_angle:.1f} degrees"
+        )
+        self.optimized_bbox_label.config(image=None)
+        self.optimized_bbox_label.image = None 
+
+    def update_bbox(self):
+        """Update the vertebra viewer."""
+        # Apply bbox to get target vertebra 3D image
+        rot_segment_dicom_image = rotate_3D(self.segment_dicom_image,
+            sagittal_angle=self.sagittal_radiograph_angle,
+            axial_angle=self.axial_radiograph_angle
+        )
+        rot_vertebra_mask = rotate_3D(self.vertebra_mask,
+            sagittal_angle=self.sagittal_radiograph_angle,
+            axial_angle=self.axial_radiograph_angle
+        )
+        rot_bbox_coord, rot_bbox_mask = compute_bbox(rot_vertebra_mask)
+        rot_bbox_vertebra_image = rot_segment_dicom_image[
+            rot_bbox_coord["z_min"]-5:rot_bbox_coord["z_max"]+5,
+            rot_bbox_coord["y_min"]:rot_bbox_coord["y_max"],
+            rot_bbox_coord["x_min"]:rot_bbox_coord["x_max"],
+        ]
+        if self.style_radiograph == self.radiograph_styles[0]:
+            radiograph_bbox = compress_bonemri(rot_bbox_vertebra_image, axis=2)
+        else:
+            radiograph_bbox = get_radiograph(rot_bbox_vertebra_image, axis=0)
+
+        # Update vertebra viewer
+        self.upload_image_to_label(self.radiograph_bbox_label, 
+            image=np.rot90(radiograph_bbox, 3),
+            scale_factor=7
+        )
+
+    def optimize_angles(self):
+        """Start angle optimization algorithm on current bbox."""
+        # Rotate image and mask with angles currently active in GUI
+        rot_segment_dicom_image = rotate_3D(self.segment_dicom_image,
+            sagittal_angle=self.sagittal_radiograph_angle,
+            axial_angle=self.axial_radiograph_angle
+        )
+        rot_vertebra_mask = rotate_3D(self.vertebra_mask,
+            sagittal_angle=self.sagittal_radiograph_angle,
+            axial_angle=self.axial_radiograph_angle
+        )
+
+        # Obtain bbox coord of rotated vertebra
+        bbox_coord, _ = compute_bbox(rot_vertebra_mask)
+        rot_vertebra_bbox_image = rot_segment_dicom_image[
+            bbox_coord["z_min"]-5:bbox_coord["z_max"]+5,
+            bbox_coord["y_min"]:bbox_coord["y_max"],
+            bbox_coord["x_min"]:bbox_coord["x_max"]
+        ]
+        # Generate template image
+        template = generate_template(self.segment_dicom_image, 
+            self.segment_data, 
+            self.target_vertebra, 
+            self.euler_angles
+        )
+        # Bounds the saggital, coronal, and axial angles
+        bounds = [(-45, 45), (0, 0), (-15, 15)] 
+
+        # Optimize the rotation angles
+        optimal_angles = optimize_rotation(rot_vertebra_bbox_image, template, bounds)
+
+        # Apply optimized rotation angles to rotated full image and mask
+        optimized_segment_dicom_image = rotate_3D(rot_segment_dicom_image,
+            sagittal_angle=optimal_angles[0],
+            axial_angle=optimal_angles[2]
+        )
+        optimized_vertebra_mask = rotate_3D(rot_vertebra_mask,
+            sagittal_angle=optimal_angles[0],
+            axial_angle=optimal_angles[2]
+        )
+
+        # Find bbox of the image rotated by the optimized angles
+        optimized_bbox_coord, _ = compute_bbox(optimized_vertebra_mask)
+        optimized_bbox_vertebra_image = optimized_segment_dicom_image[
+            optimized_bbox_coord["z_min"]-5:optimized_bbox_coord["z_max"]+5,
+            optimized_bbox_coord["y_min"]:optimized_bbox_coord["y_max"],
+            optimized_bbox_coord["x_min"]:optimized_bbox_coord["x_max"]
+        ]
+        if self.style_radiograph == self.radiograph_styles[0]:
+            optimized_radiograph_bbox = compress_bonemri(optimized_bbox_vertebra_image, axis=2)
+        else:
+            optimized_radiograph_bbox = get_radiograph(optimized_bbox_vertebra_image, axis=0)
+
+        # Update vertebra viewer
+        self.upload_image_to_label(self.optimized_bbox_label, 
+            image=np.rot90(optimized_radiograph_bbox, 3),
+            scale_factor=7
+        )
+
+        # Update text in viewer
+        self.opt_sag_angle_text_label.configure(
+            text=f"Optimized sagittal angle: {optimal_angles[0]:.1f} degrees"
+        )
+        self.opt_ax_angle_text_label.configure(
+            text=f"Optimized axial angle: {optimal_angles[2]:.1f} degrees"
+        )
