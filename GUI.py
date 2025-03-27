@@ -7,6 +7,7 @@ import os
 
 import tkinter as tk
 import customtkinter as ctk
+from scipy.ndimage import zoom
 
 from tkinter import filedialog
 from PIL import Image, ImageTk
@@ -503,7 +504,8 @@ class App(ctk.CTk):
         self.upload_image_to_label(
             self.axial_dicom_image_label, 
             np.rot90(self.window_dicom_image[:,self.axial_slice_idx,:], 3),
-            np.rot90(self.vertebra_mask[:,self.axial_slice_idx,:], 3)
+            np.rot90(self.vertebra_mask[:,self.axial_slice_idx,:], 3),
+            aspect=0.24
         )
         self.axial_slider_text.configure(text=f"Axial slice {self.axial_slice_idx}")
 
@@ -513,7 +515,8 @@ class App(ctk.CTk):
         self.upload_image_to_label(
             self.coronal_dicom_image_label, 
             np.rot90(self.window_dicom_image[:,:,self.coronal_slice_idx], 3),
-            np.rot90(self.vertebra_mask[:,:,self.coronal_slice_idx], 3)
+            np.rot90(self.vertebra_mask[:,:,self.coronal_slice_idx], 3),
+            aspect=0.24
         )
         self.coronal_slider_text.configure(text=f"Coronal slice {self.coronal_slice_idx}")
 
@@ -543,12 +546,14 @@ class App(ctk.CTk):
         self.upload_image_to_label(
             self.axial_dicom_image_label, 
             np.rot90(self.window_dicom_image[:,self.axial_slice_idx,:], 3),
-            np.rot90(self.vertebra_mask[:,self.axial_slice_idx,:], 3)
+            np.rot90(self.vertebra_mask[:,self.axial_slice_idx,:], 3),
+            aspect=0.24
         )
         self.upload_image_to_label(
             self.coronal_dicom_image_label, 
             np.rot90(self.window_dicom_image[:,:,self.coronal_slice_idx], 3),
-            np.rot90(self.vertebra_mask[:,:,self.coronal_slice_idx], 3)
+            np.rot90(self.vertebra_mask[:,:,self.coronal_slice_idx], 3),
+            aspect=0.24
         )
 
     def reset_window(self):
@@ -568,7 +573,7 @@ class App(ctk.CTk):
         # Update window and DICOM viewer
         self.update_window()
 
-    def upload_image_to_label(self, label_widget, image, mask=None, scale_factor=None): 
+    def upload_image_to_label(self, label_widget, image, mask=None, scale_factor=None, aspect=None): 
         """Uploading images to label widgets."""  
         # Ensure the input image is in uint8 format (0-255 range)
         if image.dtype != np.uint8:
@@ -577,8 +582,16 @@ class App(ctk.CTk):
             else: 
                 image = (image / image.max() * 255).astype(np.uint8)
 
+        # Aspect ratio correction for coronal/axial
+        if aspect is not None:
+            target_height = 672
+            target_width = int(target_height * aspect) 
+            image = cv2.resize(image, (target_width, target_height), interpolation=cv2.INTER_LANCZOS4)
+            if mask is not None:
+                mask = cv2.resize(mask, (target_width, target_height), interpolation=cv2.INTER_NEAREST)
+
         # Apply upscaling if scale_factor is provided
-        if scale_factor is not None and scale_factor > 1:
+        if scale_factor is not None:
             # Calculate new dimensions
             new_height = int(image.shape[0] * scale_factor)
             new_width = int(image.shape[1] * scale_factor)
@@ -643,11 +656,13 @@ class App(ctk.CTk):
         )
         self.upload_image_to_label(
             self.axial_radiograph_image_label, 
-            np.rot90(self.radiograph_axial, 3)
+            np.rot90(self.radiograph_axial, 3),
+            aspect=0.24
         )
         self.upload_image_to_label(
             self.coronal_radiograph_image_label, 
-            np.rot90(self.radiograph_coronal, 3)
+            np.rot90(self.radiograph_coronal, 3),
+            aspect=0.24
         )
 
         # Update vertebra viewer
@@ -713,12 +728,14 @@ class App(ctk.CTk):
         self.upload_image_to_label(
             self.axial_dicom_image_label, 
             np.rot90(self.window_dicom_image[:,self.axial_slice_idx,:], 3),
-            np.rot90(self.vertebra_mask[:,self.axial_slice_idx,:], 3)
+            np.rot90(self.vertebra_mask[:,self.axial_slice_idx,:], 3),
+            aspect=0.24
         )
         self.upload_image_to_label(
             self.coronal_dicom_image_label, 
             np.rot90(self.window_dicom_image[:,:,self.coronal_slice_idx], 3),
-            np.rot90(self.vertebra_mask[:,:,self.coronal_slice_idx], 3)
+            np.rot90(self.vertebra_mask[:,:,self.coronal_slice_idx], 3),
+            aspect=0.24
         )
 
         # Activate angle calculation buttons
@@ -797,6 +814,12 @@ class App(ctk.CTk):
         self.vertebra_ax_angle_text_label.configure(
             text=f"Current axial angle: {self.axial_radiograph_angle:.1f} degrees"
         )
+        self.opt_sag_angle_text_label.configure(
+            text=f"Optimized sagittal angle: 0 degrees"
+        )
+        self.opt_ax_angle_text_label.configure(
+            text=f"Optimized axial angle: 0 degrees"
+        )
         self.optimized_bbox_label.config(image=None)
         self.optimized_bbox_label.image = None 
 
@@ -811,6 +834,8 @@ class App(ctk.CTk):
             sagittal_angle=self.sagittal_radiograph_angle,
             axial_angle=self.axial_radiograph_angle
         )
+
+        # Create bbox
         rot_bbox_coord, rot_bbox_mask = compute_bbox(rot_vertebra_mask)
         rot_bbox_vertebra_image = rot_segment_dicom_image[
             rot_bbox_coord["z_min"]-5:rot_bbox_coord["z_max"]+5,
@@ -822,10 +847,11 @@ class App(ctk.CTk):
         else:
             radiograph_bbox = get_radiograph(rot_bbox_vertebra_image, axis=0)
 
-        # Update vertebra viewer
+        aspect = 0.24 * ((radiograph_bbox.shape[0]/100) / (radiograph_bbox.shape[1]/672))
         self.upload_image_to_label(self.radiograph_bbox_label, 
             image=np.rot90(radiograph_bbox, 3),
-            scale_factor=7
+            scale_factor=0.4,
+            aspect=aspect
         )
 
     def optimize_angles(self):
@@ -881,10 +907,11 @@ class App(ctk.CTk):
         else:
             optimized_radiograph_bbox = get_radiograph(optimized_bbox_vertebra_image, axis=0)
 
-        # Update vertebra viewer
+        aspect = 0.24 * ((optimized_radiograph_bbox.shape[0]/100) / (optimized_radiograph_bbox.shape[1]/672))
         self.upload_image_to_label(self.optimized_bbox_label, 
             image=np.rot90(optimized_radiograph_bbox, 3),
-            scale_factor=7
+            scale_factor=0.4, 
+            aspect=aspect
         )
 
         # Update text in viewer
