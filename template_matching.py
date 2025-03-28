@@ -131,12 +131,9 @@ def generate_template(image, segment_data, label, euler_angles, plot=False):
 
     image_2D = compress_bonemri(ROI_3D_image, axis=2).astype(np.float32)
     mask = np.zeros_like(image_2D, dtype=int)
-    #mask[30:37, 22:42] = 1
-    #mask[43:48, 13:26] = 1
-    #mask[15:21, 13:26] = 1
-    mask[14:49, 11:43] = 1
+    mask[10:image_2D.shape[0]-10, 10:image_2D.shape[1]-10] = 1
     masked = image_2D*mask
-    cropped_mask = masked[10:53, 7:47] 
+    cropped_mask = masked[10:image_2D.shape[0]-10, 10:image_2D.shape[1]-10] 
 
     if plot:
         fig, ax = plt.subplots(1, 2, figsize=(15, 5))

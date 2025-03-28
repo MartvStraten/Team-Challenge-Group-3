@@ -166,9 +166,14 @@ def compute_pca(binary_volume, label):
     # Get voxel coordinates
     coords = np.argwhere(binary_volume)
     centered_coords = coords - coords.mean(axis=0)
-    # Cut off spinous process for lumbar vertebrae
-    if label >= 12:
+    # Editing datapoints of Lumbar vertebrae
+    if label >= 10:
+        # Cutting off spinous process
         coords = coords[coords[:, 1] < np.percentile(coords[:, 1], 95)]
+    # Editing datapoints of thoracic vertebrae
+    else:
+        # Cutting off spinous process
+        coords = coords[coords[:, 2] < np.percentile(coords[:, 2], 70)]
 
     # Compute PCA
     pca = PCA(n_components=3)
@@ -184,5 +189,9 @@ def compute_pca(binary_volume, label):
     
     # Ensure angles are between -45 and 45 degrees
     euler_angles = np.array([(((a + 45)  % 90) - 45) for a in euler_angles])
+
+    # Correct for unrealistic axial rotations
+    if abs(euler_angles[2]) > 4:
+        euler_angles[2] /= 3
 
     return centered_coords, components, euler_angles
