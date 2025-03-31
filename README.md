@@ -36,3 +36,4 @@ The code is divided into Python files and Jupyter Notebook files. The Python fil
 - `GUI.ipynb` can be used to start the graphical user interface. It should be relatively straight-forward to use and is the easiest way to experiment with the algorithm.
 - `Template_matching.ipynb` is a notebook that was primarily used to test the code of the template matching algorithm.
 - `load_data.ipynb` is a notebook where we experimented with the data and performed the first calculations of the boundings boxes / PCA.
+- `performance_metrics.ipynb` contains our validation on the performance of the c-arm angle algorithm.
