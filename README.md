@@ -1,7 +1,7 @@
 # Team Challenge group 3 - Automatic C-arm Angle Algorithm
 
 ## Overview
-This repository contains code and resources our automatic C-arm angle algorithm. The goal of this project is to develop a method for automatically determining the rotation angles of a C-arm to obtain a true AP fluoroscopy image of a target vertebra. This README will guide you through the setup, usage, and structure of the repository.
+This repository contains code and resources for our automatic C-arm angle algorithm. The goal of this project is to develop a method for automatically determining the rotation angles of a C-arm to obtain a true AP fluoroscopy image of a target vertebra. This README will guide you through the setup, usage, and structure of the repository.
 
 ## Table of Contents
 - Overview
